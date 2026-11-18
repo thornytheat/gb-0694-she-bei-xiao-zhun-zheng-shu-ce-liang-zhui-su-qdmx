@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+{% block stage_visual %}
+<div class="chain-node">
+  <b>原回执身份</b>
+  <div>{{ run.manifest.run_id[:12]}} · r{{ run.revision }}</div>
+  <small>{{ run.decision }}（保持不变）</small>
+</div>
+{% if correction %}
+<div class="chain-node">
+  <b>纠错对象</b>
+  <div>{{ correction['correction_id'] }} · r{{ correction['revision'] if 'revision' in correction else current.revision }}</div>
+  <small>{{ current.state }}</small>
+</div>
+<div class="chain-node">
+  <b>纠错范围</b>
+  <div>修正 {{ current.corrected_certs|length }} 份 / 影响 {{ current.affected_certs|length }} 份</div>
+  <small>{% set affected_text = current.affected_certs|join('，') %}{{ affected_text[:80] }}</small>
+</div>
+{% else %}
+<div class="chain-node"><b>尚无纠错</b><div>提交修正证书 CSV 后生成对象级纠错</div><small>原批次结论不受影响</small></div>
+{% endif %}
+{% endblock %}
+{% block correction_panel %}
+<section class="panel wide">
+  <div class="panel__head"><h2>纠错对象与停用去向</h2><span>{{ current.rows|length }} 条对象</span></div>
+  <div class="panel__body">
+    {% if corrections %}
+    <div class="correction-tabs">
+      {% for c in corrections %}
+      <a class="btn {{'active' if correction and c['id']==correction['correction_id']}}"
+         href="/work/8?run_id={{ run.manifest.run_id }}&correction_id={{ c['id'] }}">{{ c['id'][:10] }} · {{ c['state'] }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <div class="actions">
+      {% if correction %}
+      <button data-m8-action="confirm" data-decision="通过">确认通过并更新</button>
+      <button data-m8-action="confirm" data-decision="退回">退回维持停用</button>
+      <button data-m8-action="rollback">回退恢复旧版复核</button>
+      <a class="btn" href="/api/m8/evidence.csv?correction_id={{ correction['correction_id'] }}">纠错证据CSV</a>
+      <a class="btn" href="/api/m8/effective?correction_id={{ correction['correction_id'] }}">有效裁决视图</a>
+      {% endif %}
+    </div>
+    <div class="error" role="status" id="m8-notice"></div>
+  </div>
+  <div class="scroll">
+    {% if current.rows %}
+    <table>
+      <thead><tr>{% for key in current.rows[0] %}<th>{{ key }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for row in current.rows %}
+        <tr class="sev--{{ 'suspended' if '停用' in row['对象类别'] else ('ok' if '沿用' in row['对象类别'] or '更新' in row['对象类别'] else 'muted') }}">
+          {% for value in row.values() %}<td title="{{ value }}">{{ value|display }}</td>{% endfor %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">尚未提交纠错。下方粘贴修正后的证书 CSV（同 14 列结构），仅其中涉及证书及其下游测量会被重判。</p>
+    {% endif %}
+  </div>
+</section>
+<section class="panel wide">
+  <div class="panel__head"><h2>提交证书纠错 / 补录（离线，不接外部源）</h2><span>对象级 · 可续跑 · 幂等</span></div>
+  <div class="panel__body">
+    <details {% if not correction %}open{% endif %}>
+      <summary>修正证书 CSV（保留原回执身份，重跑同一内容不生成第二份纠错）</summary>
+      <textarea id="correction-csv" aria-label="纠错证书CSV" placeholder="粘贴与主输入相同 14 列表头的修正证书行"></textarea>
+      <div class="actions">
+        <button id="m8-submit">提交纠错文本</button>
+        <input type="file" id="correction-file" accept=".csv">
+        <button id="m8-upload">上传纠错文件</button>
+      </div>
+    </details>
+  </div>
+</section>
+{% if current.quarantine_delta and current.quarantine_delta.get('纠错新增隔离') %}
+<section class="panel wide">
+  <div class="panel__head"><h2>纠错新增隔离</h2><span>{{ current.quarantine_delta['纠错新增隔离']|length }} 条</span></div>
+  <div class="scroll">
+    <table><thead><tr><th>原始行</th><th>证书</th><th>原因码</th><th>原因</th></tr></thead>
+      <tbody>{% for row in current.quarantine_delta['纠错新增隔离'] %}
+        <tr><td>{{ row['行号'] }}</td><td>{{ row.get('cert','—') }}</td><td class="sev--severe">{{ row['原因码'] }}</td><td>{{ row['原因'] }}</td></tr>
+      {% endfor %}</tbody></table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
+{% block archive_script %}
+<script id="archive" type="application/json">{{ {
+  'id': run.manifest.run_id, 'revision': run.revision,
+  'correction_id': correction['correction_id'] if correction else none,
+  'correction_revision': current.revision
+}|tojson }}</script>
+{% endblock %}

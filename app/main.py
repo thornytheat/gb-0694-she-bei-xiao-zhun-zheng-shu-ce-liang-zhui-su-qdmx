@@ -13,6 +13,7 @@ from app.modules.m4_ranges.handler import bp as bp4
 from app.modules.m5_trace.handler import bp as bp5
 from app.modules.m6_verdict.handler import bp as bp6
 from app.modules.m7_revocation.handler import bp as bp7
+from app.modules.m8_correction.handler import bp as bp8
 app=Flask(__name__)
 app.config['MAX_CONTENT_LENGTH']=5*1024*1024
 app.json.ensure_ascii=False
@@ -32,12 +33,19 @@ app.register_blueprint(bp4)
 app.register_blueprint(bp5)
 app.register_blueprint(bp6)
 app.register_blueprint(bp7)
+app.register_blueprint(bp8)
 @app.before_request
 def validate_request_object():
     if request.method!='POST': return None
     if request.files:
-        if request.path!='/api/run' or 'file' not in request.files:
-            raise DomainError('REQUEST','上传必须使用file字段',400)
+        if request.path=='/api/run':
+            if 'file' not in request.files:
+                raise DomainError('REQUEST','上传必须使用file字段',400)
+        elif request.path.startswith('/api/m8/corrections'):
+            if 'file' not in request.files:
+                raise DomainError('REQUEST','上传必须使用file字段',400)
+        else:
+            raise DomainError('REQUEST','该接口不接受文件上传',400)
         return None
     if not request.is_json:
         raise DomainError('REQUEST','请求须为JSON对象或CSV文件',400)
